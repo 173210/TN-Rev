@@ -17,7 +17,7 @@
 void memset(unsigned char * destination, unsigned char value, unsigned size);
 void memcpy(unsigned char * destination, const unsigned char * source, int size);
 int ValidUserAddress(void * addr);
-unsigned FindImport(char * libname, unsigned nid);
+void *FindImport(const void *p, const char *libname, int nid);
 unsigned FindFunction(const char * modulename, const char * library, unsigned nid);
 
 #endif

@@ -21,40 +21,24 @@ void memcpy(unsigned char * destination, const unsigned char * source, int size)
 	};
 };
 
-int ValidUserAddress(void * addr)
+void *FindImport(const void *p, const char *libname, int nid)
 {
-	if((u32)addr >= 0x08800000 && (u32)addr < 0x0A000000) 
-		return 1;
-		
-	return 0;
-}
+	SceLibraryStubTable *stub;
+	const int umemEnd = 0x0A000000;
+	int i;
 
-unsigned FindImport(char * libname, unsigned nid) //sub_00010DB8
-{
-	u32 i;
-	for(i = 0x08800000; i < 0x0A000000; i += 4)
-	{
-		SceLibraryStubTable *stub = (SceLibraryStubTable *)i;
-
-		if((stub->libname != libname) && ValidUserAddress((void *)stub->libname) && ValidUserAddress(stub->nidtable) && ValidUserAddress(stub->stubtable))
-		{
-			if(strcmp(libname, stub->libname) == 0)
-			{
-				u32 *nids = stub->nidtable;
-
-				int count;
-				for(count = 0; count < stub->stubcount; count++)
-				{
-					if(nids[count] == nid)
-					{
-						return ((u32)stub->stubtable + (count * 8));
-					}
-				}
-			}
-		}
+	for (stub = p; (int)stub < umemEnd; stub = (void *)stub + 4) {
+		if (stub->libname != libname
+			&& stub->libname >= p && stub->libname < umemEnd
+			&& stub->nidtable >= p && stub->nidtable < umemEnd
+			&& stub->stubtable >= p && stub->stubtable < umemEnd
+			&& !strcmp(libname, stub->libname))
+			for (i = 0; i < stub->stubcount; i++)
+				if (((int *)stub->nidtable)[i] == nid)
+					return stub->stubtable + i * 8;
 	}
 
-	return 0;
+	return NULL;
 }
 
 int strlen(const char * str) //sub_00010E94
