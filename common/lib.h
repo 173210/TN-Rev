@@ -16,8 +16,7 @@
 
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
-int ValidUserAddress(void * addr);
+int strcmp(const char *s1, const char *s2);
 void *FindImport(const void *p, const char *libname, int nid);
-unsigned FindFunction(const char * modulename, const char * library, unsigned nid);
 
 #endif

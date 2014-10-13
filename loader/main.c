@@ -51,35 +51,86 @@ static void fillDisp(int color)
 		*p = color;
 };
 
+static struct SceLibraryEntryTable *kFindLib(const char *modname, const char *libname)
+{
+	struct SceLibraryEntryTable *ent;
+	SceModule2 *mod;
+	unsigned u;
+
+	mod = _sceKernelFindModuleByName(modname);
+	if (mod != NULL) {
+		ent = (struct SceLibraryEntryTable *)mod->ent_top;
+
+		for (u = mod->ent_size; u > 0; u--)
+			if (!strcmp(ent->libname, libname))
+				return ent;
+
+		ent = (void *)ent + ent->len * 4;
+	}
+	
+	return NULL;
+}
+
+static void *kFindFunc(const struct SceLibraryEntryTable *ent, int nid)
+{
+	int *tbl;
+	int i;
+
+	if (ent != NULL) {
+		tbl = ent->entrytable;
+		for (i = ent->stubcount; i > 0; i++)
+			if (*tbl == nid)
+				return tbl + ent->stubcount + ent->vstubcount;
+	}
+
+	return NULL;
+}
+
 static int kResolve()
 {
-	unsigned *kp;
+	const struct SceLibraryEntryTable *ent;
+	const void *p;
 
-	for(kp = (unsigned *)0x88000000; (unsigned)kp < 0x883FFFA8; kp++) {
-		if (kp[0] == 0x27BDFFE0
-			&& kp[1] == 0xAFB40010
-			&& kp[2] == 0xAFB3000C
-			&& kp[3] == 0xAFB20008
-			&& kp[4] == 0x00009021
-			&& kp[5] == 0x02409821
-			&& kp[21] == 0x0263202A)
-		{
-			_sceKernelFindModuleByName = (void *)kp;
+	for (p = (void *)0x88000000;
+		strcmp((char *)p, "sceLoaderCore")
+			|| *(int *)(p + 0x64) != *(int *)(p + 0x78)
+			|| *(int *)(p + 0x68) != *(int *)(p + 0x88)
+			|| *(int *)(p + 0x64) != *(int *)(p + 0x68);
+		p += 4)
+	{
+		if ((unsigned)p >= 0x88400000 - 0x64)
+			return -1;
+	}
 
-			//searches IO file functions
-			_sceIoOpen = (void *)FindFunction("sceIOFileManager", "IoFileMgrForKernel", 0x109F50BC);
-			_sceIoRead = (void *)FindFunction("sceIOFileManager", "IoFileMgrForKernel", 0x6A638D83);
-			_sceIoWrite = (void *)FindFunction("sceIOFileManager", "IoFileMgrForKernel", 0x42EC03AC);
-			_sceIoClose = (void *)FindFunction("sceIOFileManager", "IoFileMgrForKernel", 0x810C4BC3);
-			_sceIoGetstat = (void *)FindFunction("sceIOFileManager", "IoFileMgrForKernel", 0xACE946E8);
+	for (p += 0x64; strcmp((const char *)p, "LoadCoreForKernel"); p += 4)
+		if ((unsigned)p >= 0x88400000)
+			return -1;
 
-			//finds readbuffer function
-			_sceCtrlReadBufferPositive = (void *)FindFunction("sceController_Service", "sceCtrl", 0x1F803938);
-			return 0;
-		};
-	};
+	ent = p;
+	while (ent->libname != p) {
+		ent = (void *)ent - 4;
+		if ((unsigned)ent < 0x88000000)
+			return -1;
+	}
 
-	return -1;
+	_sceKernelFindModuleByName = kFindFunc(ent, 0xF6B1BF0F);
+	if (_sceKernelFindModuleByName == NULL)
+		return -1;
+
+	ent = kFindLib("sceIOFileManager", "IoFileMgrForKernel");
+	if (ent != NULL) {
+		_sceIoOpen = (void *)kFindFunc(ent, 0x109F50BC);
+		_sceIoRead = (void *)kFindFunc(ent, 0x6A638D83);
+		_sceIoWrite = (void *)kFindFunc(ent, 0x42EC03AC);
+		_sceIoClose = (void *)kFindFunc(ent, 0x810C4BC3);
+		_sceIoGetstat = (void *)kFindFunc(ent, 0xACE946E8);
+	}
+
+	ent = kFindLib("sceController_Service", "sceCtrl");
+	if (ent != NULL)
+		_sceCtrlReadBufferPositive = (void *)kFindFunc(ent, 0x1F803938);
+
+	return 0;
 }
 
 static int loadCfg(t_config *data)
@@ -95,12 +146,12 @@ static int loadCfg(t_config *data)
 	if (ret != sizeof(t_config)) {
 		memset(data, 0, sizeof(t_config));
 		ret = -1;
-	};
+	}
 
 	_sceIoClose(fd);
 
 	return ret;
-};
+}
 
 static int getFw()
 {
@@ -108,7 +159,10 @@ static int getFw()
 	SceUID fd;
 	char buf[64];
 
-	for (p = kFiles; p->buffer; p++)
+	for (p = kFiles; p->buffer != NULL; p++) {
+		if (strcmp(p->name, "/vsh/module/savedata_auto_dialog.prx"))
+			continue;
+
 		switch(p->size) {
 			case 48000: return 0x160;
 			case 48128: return 0x165;
@@ -133,10 +187,11 @@ static int getFw()
 				_sceIoClose(fd);
 				fillDisp(0x00FF0000);
 				__asm__("break");
-		};
+		}
+	}
 
 	return -1;
-};
+}
 
 static int loadPkt()
 {
@@ -194,14 +249,14 @@ static int loadPkt()
 
 	_sceIoClose(fd);
 	return 0;
-};
+}
 
 static int hookLoadExec2B04(int unk)
 {
 	globals.fw_version = getFw();
 	loadPkt();
 	return _LoadExec2B04(unk);
-};
+}
 
 static int hookReboot(void * r_param, void * e_param, int api, int unk)
 {
@@ -211,7 +266,7 @@ static int hookReboot(void * r_param, void * e_param, int api, int unk)
 	memcpy((void *)0x88FB0000, &globals, sizeof(globals));
 
 	return _sceReboot(r_param, e_param, api, unk);
-};
+}
 
 static int patchLoadExec(SceModule2 *mod)
 {
@@ -334,7 +389,7 @@ static void kmain()
 	_sceKernelExitVSHVSH = (void *)(mod->text_addr + 0x1674);
 	_sceKernelExitVSHVSH(0);
 	return;
-};
+}
 
 static int storeThread(SceSize arglen __attribute__((unused)), void *argp)
 {
@@ -397,7 +452,7 @@ static void do_exploit()
 		_sceSdGetLastIndex(packet, packet + 64, packet + 128);
 		_sceKernelLibcTime(0x08800000, (int)kmain | 0x80000000);
 	}
-};
+}
 
 void _start() __attribute__((section(".text.start")));
 void _start(const char *path)
@@ -417,4 +472,4 @@ void _start(const char *path)
 		globals.exploit_path[i] = path[i];
 
 	do_exploit();
-};
+}
