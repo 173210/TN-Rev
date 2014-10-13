@@ -1,24 +1,32 @@
 #include "lib.h"
 
-void memset(unsigned char * destination, unsigned char value, unsigned size) //sub_00010F74
+void *memset(void *s, int c, size_t n)
 {
-	while(size)
-	{
-		* destination = value;
-		size--;
-		destination++;
-	};
+	char *p = s;
+
+	if (s != NULL)
+		while(n) {
+			*p = c;
+			n--;
+			p++;
+		};
+
+	return s;
 };
 
-void memcpy(unsigned char * destination, const unsigned char * source, int size) //sub_00010F48
+void *memcpy(void *dest, const void *src, size_t n)
 {
-	while(size > 0)
-	{
-		* destination = * source;
-		destination++;
-		source++;
-		size--;
-	};
+	char *p = dest;
+
+	if (dest != NULL && src != NULL)
+		while(n) {
+			*p = *(char *)src;
+			p++;
+			src++;
+			n--;
+		};
+
+	return dest;
 };
 
 void *FindImport(const void *p, const char *libname, int nid)

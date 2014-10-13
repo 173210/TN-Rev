@@ -14,8 +14,8 @@
 #include <psputility.h>
 #include <psploadexec_kernel.h>
 
-void memset(unsigned char * destination, unsigned char value, unsigned size);
-void memcpy(unsigned char * destination, const unsigned char * source, int size);
+void *memset(void *s, int c, size_t n);
+void *memcpy(void *dest, const void *src, size_t n);
 int ValidUserAddress(void * addr);
 void *FindImport(const void *p, const char *libname, int nid);
 unsigned FindFunction(const char * modulename, const char * library, unsigned nid);
