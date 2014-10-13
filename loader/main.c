@@ -14,6 +14,7 @@ static char * (* const _sceUnk)() = (void *)0x880098A4;
 char * (* const sprintf)(char * destination, const char * mask, ...) = (void *)0x8800E1D4;
 unsigned (* const _sceUnknown2)(unsigned, int, void *, int) = (void *)0x8800F804;
 
+static void (* _sceDisplaySetFrameBuf)(void *, int, int, int);
 static void (* _sceCtrlReadBufferPositive)(SceCtrlData *, int);
 static SceModule2 * (* _sceKernelFindModuleByName)(const char *);
 
@@ -55,35 +56,40 @@ static struct SceLibraryEntryTable *kFindLib(const char *modname, const char *li
 {
 	struct SceLibraryEntryTable *ent;
 	SceModule2 *mod;
-	unsigned u;
+	unsigned u = 0;
 
 	mod = _sceKernelFindModuleByName(modname);
-	if (mod != NULL) {
-		ent = (struct SceLibraryEntryTable *)mod->ent_top;
+	if (mod == NULL)
+		return NULL;
 
-		for (u = mod->ent_size; u > 0; u--)
-			if (!strcmp(ent->libname, libname))
-				return ent;
-
-		ent = (void *)ent + ent->len * 4;
+	for (ent = (void *)mod->ent_top;
+		strcmp(ent->libname, libname);
+		ent = (void *)ent + ent->len * 4)
+	{
+		u += ent->len;
+		if (u >= mod->ent_size)
+			return NULL;
 	}
-	
-	return NULL;
+
+	return ent;
 }
 
 static void *kFindFunc(const struct SceLibraryEntryTable *ent, int nid)
 {
-	int *tbl;
+	void *tbl;
 	int i;
 
-	if (ent != NULL) {
-		tbl = ent->entrytable;
-		for (i = ent->stubcount; i > 0; i++)
-			if (*tbl == nid)
-				return tbl + ent->stubcount + ent->vstubcount;
+	if (ent == NULL)
+		return NULL;
+
+	i = ent->stubcount;
+	for (tbl = ent->entrytable; *(int *)tbl != nid; tbl++) {
+		i--;
+		if (i <= 0)
+			return NULL;
 	}
 
-	return NULL;
+	return *((void **)tbl + ent->stubcount + ent->vstubcount);
 }
 
 static int kResolve()
@@ -92,10 +98,10 @@ static int kResolve()
 	const void *p;
 
 	for (p = (void *)0x88000000;
-		strcmp((char *)p, "sceLoaderCore")
+		strcmp(p, "sceLoaderCore")
 			|| *(int *)(p + 0x64) != *(int *)(p + 0x78)
 			|| *(int *)(p + 0x68) != *(int *)(p + 0x88)
-			|| *(int *)(p + 0x64) != *(int *)(p + 0x68);
+			|| !*(int *)(p + 0x64) || !*(int *)(p + 0x68);
 		p += 4)
 	{
 		if ((unsigned)p >= 0x88400000 - 0x64)
@@ -117,6 +123,14 @@ static int kResolve()
 	if (_sceKernelFindModuleByName == NULL)
 		return -1;
 
+	ent = kFindLib("sceController_Service", "sceCtrl");
+	if (ent != NULL)
+		_sceCtrlReadBufferPositive = (void *)kFindFunc(ent, 0x1F803938);
+
+	ent = kFindLib("sceDisplay_Service", "sceDisplay");
+	if (ent != NULL)
+		_sceDisplaySetFrameBuf = (void *)kFindFunc(ent, 0x289D82FE);
+
 	ent = kFindLib("sceIOFileManager", "IoFileMgrForKernel");
 	if (ent != NULL) {
 		_sceIoOpen = (void *)kFindFunc(ent, 0x109F50BC);
@@ -125,10 +139,6 @@ static int kResolve()
 		_sceIoClose = (void *)kFindFunc(ent, 0x810C4BC3);
 		_sceIoGetstat = (void *)kFindFunc(ent, 0xACE946E8);
 	}
-
-	ent = kFindLib("sceController_Service", "sceCtrl");
-	if (ent != NULL)
-		_sceCtrlReadBufferPositive = (void *)kFindFunc(ent, 0x1F803938);
 
 	return 0;
 }
@@ -339,17 +349,18 @@ static void kmain()
 	SceModule2 *mod;
 	char vshmain_args[1024];
 
-	__asm("lui $k1, 0x0");
-
 	exploited = 1;
+	*exploitPointer = 0;
 
-	fillDisp(0x00FF0000);
+	__asm("lui $k1, 0x0");
 
 	kResolve();
 
-	mod = _sceKernelFindModuleByName("sceLoadExec");
+	if (_sceDisplaySetFrameBuf != NULL)
+		_sceDisplaySetFrameBuf((void *)0x44000000, 512, 3, 1);
+	fillDisp(0x00FF0000);
 
-	*exploitPointer = 0;
+	mod = _sceKernelFindModuleByName("sceLoadExec");
 
 	patchLoadExec(mod);
 
@@ -457,14 +468,7 @@ static void do_exploit()
 void _start() __attribute__((section(".text.start")));
 void _start(const char *path)
 {
-	void (* _sceDisplaySetFrameBuf)(void *, int, int, int);
 	int i;
-
-	_sceDisplaySetFrameBuf = FindImport((void *)0x08800000, "sceDisplay", 0x289D82FE);
-	if (_sceDisplaySetFrameBuf)
-		_sceDisplaySetFrameBuf((void *)0x44000000, 512, 3, 1);
-	
-	fillDisp(0x00FFFFFF);
 
 	memset(&globals, 0, sizeof(globals));
 
