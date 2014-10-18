@@ -59,14 +59,6 @@ int _strcmp(const char *s1, const char *s2) //sub_00010F14
 	return val;
 }
 
-int ValidUserAddress(void * addr)
-{
-	if((u32)addr >= 0x08800000 && (u32)addr < 0x0A000000) 
-		return 1;
-		
-	return 0;
-}
-
 u32 FindTextAddrByName(const char *modulename)
 {
 	u32 kaddr;
