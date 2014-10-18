@@ -1,16 +1,18 @@
 #include "lib.h"
 
-void _memset(void * destination, unsigned char value, int size) //sub_00010F74
+void *memset(void *s, int c, size_t n)
 {
-	unsigned char * dest = (unsigned char *) destination;
-	
-	while(size > 0)
-	{
-		* dest = value;
-		size--;
-		dest++;
-	};
-};
+	char *p = s;
+
+	if (p != NULL)
+		while(n) {
+			*p = c;
+			n--;
+			p++;
+		};
+
+	return s;
+}
 
 void _memcpy(void * destination, void * source, int size) //sub_00010F48
 {
@@ -84,34 +86,6 @@ int ValidUserAddress(void * addr)
 	if((u32)addr >= 0x08800000 && (u32)addr < 0x0A000000) 
 		return 1;
 		
-	return 0;
-}
-
-unsigned FindImport(char * libname, unsigned nid) //sub_00010DB8
-{
-	u32 i;
-	for(i = 0x08800000; i < 0x0A000000; i += 4)
-	{
-		SceLibraryStubTable *stub = (SceLibraryStubTable *)i;
-
-		if((stub->libname != libname) && ValidUserAddress((void *)stub->libname) && ValidUserAddress(stub->nidtable) && ValidUserAddress(stub->stubtable))
-		{
-			if(_strcmp(libname, stub->libname) == 0)
-			{
-				u32 *nids = stub->nidtable;
-
-				int count;
-				for(count = 0; count < stub->stubcount; count++)
-				{
-					if(nids[count] == nid)
-					{
-						return ((u32)stub->stubtable + (count * 8));
-					}
-				}
-			}
-		}
-	}
-
 	return 0;
 }
 

@@ -19,13 +19,12 @@
 #define MAKE_JUMP(f) ((((unsigned)(f) >> 2) & 0x03FFFFFFF) | 0x08000000)
 #define MAKE_CALL(f) ((((unsigned)(f) >> 2) & 0x03FFFFFFF) | 0x0C000000) 
 
-void _memset(void * destination, unsigned char value, int size);
+void *memset(void *s, int c, size_t n);
 void _memcpy(void * destination, void * source, int size);
 int _strcmp(const char *s1, const char *s2);
 int _strlen(const char * str);
 char * _strchr(char * str, char c);
 int ValidUserAddress(void * addr);
-unsigned FindImport(char * libname, unsigned nid);
 void * FindExport(const char * modulename, const char * library, u32 nid);
 
 #endif

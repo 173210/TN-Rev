@@ -32,8 +32,13 @@ SceModule2 * (* _sceKernelFindModuleByName)(const char *);
 int (* _sceReboot)(void *, void *, int, int);
 int (* _LoadExec000029C0)(int); 
 
+static void * const p2 = (void *)0x08800000;
+static void * const p5 = (void *)0x08400000;
+static int * const exploitPointer = (int *)0xA800F71C;
+
 t_globals globals;
 static char vshmain_args[0x400]; 
+static int exploited = 0;
 
 //#define DEBUG
 #ifdef DEBUG
@@ -81,7 +86,7 @@ int load_config(t_config * data)
 	#endif
 
 	//fills config structure with 0's
-	_memset(data, 0, sizeof(t_config));
+	memset(data, 0, sizeof(t_config));
 	
 	//tries to open config file
 	SceUID fd = _sceIoOpen("ms0:/flash/config.tn", PSP_O_RDONLY, 0);
@@ -96,7 +101,7 @@ int load_config(t_config * data)
 	if(bytes_read != sizeof(t_config))
 	{
 		//fills with 0's again
-		_memset(data, 0x0, sizeof(t_config));
+		memset(data, 0x0, sizeof(t_config));
 		ret = -1;
 	};
 	
@@ -326,7 +331,7 @@ void patch_loadexec(unsigned location, unsigned size)
 	{
 		if(_lw(loc) == 0x24070200) //@0x00002964 in 3.18
 		{
-			_memset((void *) loc, 0, 0x20);
+			memset((void *) loc, 0, 0x20);
 			patches_done++;
 		}
 		else if(_lw(loc) == 0x02202021 && _lw(loc + 4) == 0x00401821) //@0x000029C0 in 3.18
@@ -368,11 +373,6 @@ void patch_loadexec(unsigned location, unsigned size)
 	#endif
 };
 
-void fix_kernel()
-{
-	_sw(0x00000000, 0x8800F768);
-};
-
 int kfunction()
 {
 	//set k1 to 0
@@ -382,7 +382,7 @@ int kfunction()
 	fill_screen(0x00FF0000);
 	
 	//fixes kernel
-	fix_kernel(); 
+	*exploitPointer = 0;
 	
 	//searchs for sceKernelFindModuleByName in kram
 	_sceKernelFindModuleByName = NULL;
@@ -456,14 +456,14 @@ int kfunction()
 			#endif
 			
 			//sets vshmain args
-			_memset(vshmain_args, 0, sizeof(vshmain_args));
+			memset(vshmain_args, 0, sizeof(vshmain_args));
 			vshmain_args[0x01] = 0x04;
 			vshmain_args[0x04] = 0x20;
 			vshmain_args[0x40] = 0x01;
 				
 			//sets parameters to execute
 			struct SceKernelLoadExecVSHParam param;
-			_memset(&param, 0, sizeof(param));
+			memset(&param, 0, sizeof(param));
 			param.size = sizeof(param);
 			param.argp = "ms0:/PSP/GAME/BOOT/FBOOT.PBP"; 
 			param.args = _strlen(param.argp) + 1;
@@ -488,47 +488,88 @@ int kfunction()
 	return _LoadExecForKernel_08F7166C(0);
 };
 
-void do_exploit()
+static void *FindImport(const void *p, const char *libname, int nid)
 {
-	void (* _sceKernelLibcTime)(int, int, int, int, int) = NULL;
-	void (* _sceKernelDcacheWritebackAll)() = NULL;
-	void (* _sceUtilityLoadModule)(int) = NULL;
-	
-	//finds required functions
-	_sceKernelLibcTime = (void *)FindImport("UtilsForUser", 0x27CC57F0); 
-	_sceKernelDcacheWritebackAll = (void *)FindImport("UtilsForUser", 0x79D1C3FA);
-	_sceUtilityLoadModule = (void *)FindImport("sceUtility", 0x2A2B3DE0);
-	
-	if(!_sceKernelLibcTime || !_sceKernelDcacheWritebackAll || !_sceUtilityLoadModule)
-		error();
+	const SceLibraryStubTable *stub;
+	const void *end = (void *)0x0A000000;
+	int i;
 
-	//loads required modules
-	_sceUtilityLoadModule(0x100);
-	_sceUtilityLoadModule(0x102);
-	_sceUtilityLoadModule(0x103);
-	_sceUtilityLoadModule(0x104);
-	_sceUtilityLoadModule(0x105);
-	_sceUtilityLoadModule(0x106);
-	
-	//finds kxploited function
-	void (* _sceLoadCertFromFlash)(unsigned, int, void **, void *, int, int *) = NULL;
-	_sceLoadCertFromFlash = (void *)FindImport("sceCertLoader", 0xDD629A24); 
-	
-	if(!_sceLoadCertFromFlash)
-		error();
+	for (stub = p; (int)stub < (int)end; stub = (void *)stub + 4) {
+		if (stub->libname != libname
+			&& (int)stub->libname >= (int)p && (int)stub->libname < (int)end
+			&& (int)stub->nidtable >= (int)p && (int)stub->nidtable < (int)end
+			&& (int)stub->stubtable >= (int)p && (int)stub->stubtable < (int)end
+			&& !_strcmp(libname, stub->libname))
+			for (i = 0; i < stub->stubcount; i++)
+				if (((int *)stub->nidtable)[i] == nid)
+					return stub->stubtable + i * 8;
+	}
 
-	//triggers kxploit
-	_sw(0x8800F764, 0x490A0D34);
-	_sceLoadCertFromFlash(0, 0, (void **) 0x0400FC20, (void *) 0x0400FBC4, 2360, 0);
-	
-	//flush cache
-	_sceKernelDcacheWritebackAll();
-	
-	fill_screen(0x00FF00FF);
-	
-	//jumps to kernel function
-	_sceKernelLibcTime(0, 0, 0, 0, (unsigned)kfunction | 0x80000000); //0x00010000 + 1924
-};
+	return NULL;
+}
+
+static int storeThread(SceSize arglen __attribute__((unused)), void *argp)
+{
+	int (* _sceKernelDelayThread)(SceUInt);
+	unsigned *packet = *(unsigned **)argp;
+
+	_sceKernelDelayThread = FindImport(p5, "ThreadManForUser", 0xCEADEB47);
+
+	while (!exploited) {
+		packet[9] = (unsigned)exploitPointer - 18 - (unsigned)packet;
+		_sceKernelDelayThread(0);
+	}
+
+	return 0;
+}
+
+static void do_exploit()
+{
+	unsigned packet[256] = { [9] = (unsigned)packet };
+	SceUtilitySavedataParam params = {
+		.base = {
+			.size = sizeof(SceUtilitySavedataParam),
+			.graphicsThread = 8,
+			.accessThread = 8,
+			.fontThread = 8,
+			.soundThread = 8
+		},
+		.mode = PSP_UTILITY_SAVEDATA_AUTOLOAD
+	};
+
+	SceUID (* _sceKernelCreateThread)(const char *, SceKernelThreadEntry, int, int, SceUInt, SceKernelThreadOptParam *);
+	int (* _sceKernelStartThread)(SceUID, SceSize, void *);
+	int (* _sceKernelVolatileMemUnlock)(int);
+	int (* _sceKernelLibcTime)(int, int);
+	int (* _sceSdGetLastIndex)(void *, void *, void *);
+	int (* _sceUtilitySavedataInitStart)(SceUtilitySavedataParam *);
+	int (* _sceUtilitySavedataGetStatus)();
+
+	_sceKernelVolatileMemUnlock = FindImport(p2, "sceSuspendForUser", 0xA569E425);
+	_sceUtilitySavedataInitStart = FindImport(p2, "sceUtility", 0x50C4CD57);
+
+	if (_sceKernelVolatileMemUnlock != NULL)
+		_sceKernelVolatileMemUnlock(0);
+	_sceUtilitySavedataInitStart(&params);
+
+	_sceKernelLibcTime = FindImport(p2, "UtilsForUser", 0x27CC57F0); 
+	_sceUtilitySavedataGetStatus = FindImport(p2, "sceUtility", 0x8874DBE0);
+
+	while (_sceUtilitySavedataGetStatus() < 2);
+
+	_sceKernelCreateThread = FindImport(p5, "ThreadManForUser", 0x446D8DE6);
+	_sceKernelStartThread = FindImport(p5, "ThreadManForUser", 0xF475845D);
+	_sceSdGetLastIndex = FindImport(p5, "sceChnnlsv", 0xC4C494F8);
+
+	exploited = 0;
+	_sceKernelStartThread(_sceKernelCreateThread("StoreThread", storeThread, 8, 512, THREAD_ATTR_USER, NULL), sizeof(packet[9]), packet + 9);
+
+	while (1) {
+		packet[9] = 16;
+		_sceSdGetLastIndex(packet, packet + 64, packet + 128);
+		_sceKernelLibcTime(0x08800000, (int)kfunction | 0x80000000);
+	}
+}
 
 void _start() __attribute__((section(".text.start")));
 void _start(char * path, int unload_utilities, unsigned clean_start, unsigned clean_size)
@@ -539,7 +580,7 @@ void _start(char * path, int unload_utilities, unsigned clean_start, unsigned cl
 	int (* _sceKernelFreePartitionMemory)(SceUID) = NULL;
 
 	//gets sceDisplaySetFrameBuf()
-	_sceDisplaySetFrameBuf = (void *)FindImport("sceDisplay", 0x289D82FE);
+	_sceDisplaySetFrameBuf = (void *)FindImport(p2, "sceDisplay", 0x289D82FE);
 	
 	//sets display buffer
 	if(_sceDisplaySetFrameBuf)
@@ -549,7 +590,7 @@ void _start(char * path, int unload_utilities, unsigned clean_start, unsigned cl
 	fill_screen(0x00FFFFFF); 
 	
 	//fills memory with 0's
-	_memset(&globals, 0, sizeof(globals));
+	memset(&globals, 0, sizeof(globals));
 	
 	//gets characters until "/TN"
 	int count = 0;
@@ -564,9 +605,9 @@ void _start(char * path, int unload_utilities, unsigned clean_start, unsigned cl
 	_memcpy(globals.exploit_path, path, count); 
 	
 	//finds some functions
-	_sceKernelDeleteFpl = (void *)FindImport("ThreadManForUser", 0xED1410E0);
-	_sceKernelDeleteVpl = (void *)FindImport("ThreadManForUser", 0x89B3D48C);
-	_sceKernelFreePartitionMemory = (void *)FindImport("SysMemUserForUser", 0xB6D61D02);
+	_sceKernelDeleteFpl = (void *)FindImport(p2, "ThreadManForUser", 0xED1410E0);
+	_sceKernelDeleteVpl = (void *)FindImport(p2, "ThreadManForUser", 0x89B3D48C);
+	_sceKernelFreePartitionMemory = (void *)FindImport(p2, "SysMemUserForUser", 0xB6D61D02);
 
 	unsigned i;
 	for(i = clean_start; i < clean_start + clean_size; i += 4)
@@ -584,7 +625,7 @@ void _start(char * path, int unload_utilities, unsigned clean_start, unsigned cl
 	if(unload_utilities) //must unload utilities
 	{
 		void (* _sceUtilityUnloadModule)(int) = NULL;
-		_sceUtilityUnloadModule = (void *)FindImport("sceUtility", 0xE49BFE92);
+		_sceUtilityUnloadModule = (void *)FindImport(p2, "sceUtility", 0xE49BFE92);
 		if(_sceUtilityUnloadModule)
 		{
 			for(i = 0x100; i < 0x402; i++) //does it the other way
