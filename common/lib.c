@@ -14,18 +14,21 @@ void *memset(void *s, int c, size_t n)
 	return s;
 }
 
-void _memcpy(void * destination, void * source, int size) //sub_00010F48
+void *memcpy(void *dest, const void *src, size_t n)
 {
-	unsigned char * s = (unsigned char *) source;
-	unsigned char * dest = (unsigned char *) destination;
-	
-	while(size > 0)
-	{
-		* dest = * s;
-		dest++;
-		s++;
-		size--;
+	char *p = dest;
+
+	if (dest == NULL || src == NULL)
+		return NULL;
+
+	while(n) {
+		*p = *(char *)src;
+		n--;
+		p++;
+		src++;
 	};
+
+	return dest;
 };
 
 int _strlen(const char * str) //sub_00010E94

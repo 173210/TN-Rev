@@ -219,7 +219,7 @@ int load_packet_files()
 	};
 	
 	//copies those modules info to a higher address
-	_memcpy((void *)(0x8BA00000 + packet_file_count * sizeof(kernel_file)), (void *) 0x8B000000, k_files_bytes);
+	memcpy((void *)(0x8BA00000 + packet_file_count * sizeof(kernel_file)), (void *) 0x8B000000, k_files_bytes);
 
 	//nulls buffer of last entry
 	file = (kernel_file *)(0x8BA00000 + (k_files_count + packet_file_count) * sizeof(kernel_file));
@@ -302,10 +302,10 @@ int hook_reboot(void * r_param, void * e_param, int api, int rnd)
 		address = 0xABDFF000;
 		
 	//backups 
-	_memcpy(globals.unknown_big, (void *) address, sizeof(globals.unknown_big));
+	memcpy(globals.unknown_big, (void *) address, sizeof(globals.unknown_big));
 	
 	//backup global variables
-	_memcpy((void *) 0x88FB0000, &globals, sizeof(globals));
+	memcpy((void *) 0x88FB0000, &globals, sizeof(globals));
 	
 	#ifdef DEBUG
 	_log("Calling _sceReboot()");
@@ -571,9 +571,10 @@ static void do_exploit()
 	}
 }
 
-void _start() __attribute__((section(".text.start")));
-void _start(char * path)
+void _start()
 {
+	const char path[] = "ms0:/PSP/SAVEDATA/TNV";
+
 	void (* _sceDisplaySetFrameBuf)(unsigned *, int, int, int) = NULL;
 
 	//gets sceDisplaySetFrameBuf()
@@ -589,17 +590,8 @@ void _start(char * path)
 	//fills memory with 0's
 	memset(&globals, 0, sizeof(globals));
 	
-	//gets characters until "/TN"
-	int count = 0;
-	char * pointer = path;
-	while(pointer[0] != '/' || pointer[1] != 'T' || pointer[2] != 'N')
-	{
-		count++;
-		pointer++;
-	};
-	
 	//copies path
-	_memcpy(globals.exploit_path, path, count);
+	memcpy(globals.exploit_path, path, sizeof(path));
 	
 	do_exploit();
 }
