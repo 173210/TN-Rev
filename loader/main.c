@@ -95,7 +95,7 @@ static struct SceLibraryEntryTable *kFindLib(const char *modname, const char *li
 			if (ent->libname == NULL) {
 				if (libname == NULL)
 					return ent;
-			} else if (!_strcmp(ent->libname, libname))
+			} else if (!strcmp(ent->libname, libname))
 				return ent;
 
 			ent = (void *)ent + ent->len * 4;
@@ -173,7 +173,7 @@ int get_fw_version()
 	kernel_file * file = (kernel_file *) 0x8B000000;
 	while(file->buffer)
 	{
-		if(!_strcmp(file->name, "/vsh/module/savedata_auto_dialog.prx"))
+		if(!strcmp(file->name, "/vsh/module/savedata_auto_dialog.prx"))
 		{
 			//savedata_auto_dialog size changed in every fw due to patches
 			switch(file->size)
@@ -552,7 +552,7 @@ static void *FindImport(const void *p, const char *libname, int nid)
 			&& (int)stub->libname >= (int)p && (int)stub->libname < (int)end
 			&& (int)stub->nidtable >= (int)p && (int)stub->nidtable < (int)end
 			&& (int)stub->stubtable >= (int)p && (int)stub->stubtable < (int)end
-			&& !_strcmp(libname, stub->libname))
+			&& !strcmp(libname, stub->libname))
 			for (i = 0; i < stub->stubcount; i++)
 				if (((int *)stub->nidtable)[i] == nid)
 					return stub->stubtable + i * 8;

@@ -31,30 +31,19 @@ void *memcpy(void *dest, const void *src, size_t n)
 	return dest;
 };
 
-int _strcmp(const char *s1, const char *s2) //sub_00010F14
+int strcmp(const char *s1, const char *s2)
 {
-	int val = 0;
-	const unsigned char *u1, *u2;
+	const unsigned char *u1 = (unsigned char *)s1;
+	const unsigned char *u2 = (unsigned char *)s2;
 
-	u1 = (unsigned char *) s1;
-	u2 = (unsigned char *) s2;
+	if (s1 != NULL && s2 != NULL)
+		while(*u1) {
+			if(*u1 != *u2)
+				return *u1 - *u2;
 
-	while(1)
-	{
-		if(*u1 != *u2)
-		{
-			val = (int) *u1 - (int) *u2;
-			break;
+			u1++;
+			u2++;
 		}
 
-		if((*u1 == 0) && (*u2 == 0))
-		{
-			break;
-		}
-
-		u1++;
-		u2++;
-	}
-
-	return val;
+	return 0;
 }
