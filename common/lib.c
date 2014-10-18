@@ -31,18 +31,6 @@ void *memcpy(void *dest, const void *src, size_t n)
 	return dest;
 };
 
-int _strlen(const char * str) //sub_00010E94
-{
-	int c = 0;
-	while(* str)
-	{
-		str++;
-		c++;
-	};
-	
-	return c;
-};
-
 int _strcmp(const char *s1, const char *s2) //sub_00010F14
 {
 	int val = 0;

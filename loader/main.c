@@ -4,6 +4,16 @@
 #include "../common/lib.h"
 #include "../common/structures.h"
 
+#define PATH "ms0:/PSP/SAVEDATA/TNV"
+#ifdef DEBUG
+const char logFile[] = PATH "/LOG.TXT";
+#define DBG_INIT() _dbg_init()
+#define DBG_PUTS(s) _dbg_puts(s, sizeof(s) - 1)
+#else
+#define DBG_INIT()
+#define DBG_PUTS()
+#endif
+
 typedef struct
 {
 	char game_id[14];
@@ -40,27 +50,19 @@ t_globals globals;
 static char vshmain_args[0x400]; 
 static int exploited = 0;
 
-//#define DEBUG
 #ifdef DEBUG
-
-void _log_create()
+void _dbg_init()
 {
-	char buffer[0x100];
-	_sprintf(buffer, "%s/LOG.TXT", globals.exploit_path);
-	SceUID fd = _sceIoOpen(buffer, PSP_O_CREAT | PSP_O_WRONLY | PSP_O_TRUNC, 0777); 
+	SceUID fd = _sceIoOpen(logFile, PSP_O_CREAT | PSP_O_WRONLY | PSP_O_TRUNC, 0777);
 	_sceIoClose(fd);
-};
+}
 
-void _log(const char * str)
+void _dbg_puts(const char *s, SceSize len)
 {
-	char buffer[0x100];
-	_sprintf(buffer, "%s/LOG.TXT", globals.exploit_path);
-	SceUID fd = _sceIoOpen(buffer, PSP_O_CREAT | PSP_O_WRONLY | PSP_O_APPEND, 0777);
-	_sprintf(buffer, str);
-	_sceIoWrite(fd, buffer, _strlen(buffer));
+	SceUID fd = _sceIoOpen(logFile, PSP_O_CREAT | PSP_O_WRONLY | PSP_O_APPEND, 0777);
+	_sceIoWrite(fd, s, len);
 	_sceIoClose(fd);
-};
-
+}
 #endif
 
 void fill_screen(unsigned color)
@@ -82,7 +84,7 @@ void error()
 int load_config(t_config * data)
 {
 	#ifdef DEBUG
-	_log("Loading config from ms0:/flash/config.tn.\n");
+	DBG_PUTS("Loading config from ms0:/flash/config.tn.\n");
 	#endif
 
 	//fills config structure with 0's
@@ -110,7 +112,7 @@ int load_config(t_config * data)
 	
 	#ifdef DEBUG
 	if(ret != -1)
-		_log("Config successfully loaded\n");
+		DBG_PUTS("Config successfully loaded\n");
 	#endif
 
 	return ret;
@@ -119,7 +121,7 @@ int load_config(t_config * data)
 int get_fw_version()
 {
 	#ifdef DEBUG
-	_log("Getting fw version\n");
+	DBG_PUTS("Getting fw version\n");
 	#endif
 
 	fill_screen(0x00999999); //grey	
@@ -149,7 +151,7 @@ int get_fw_version()
 				case 0xBE00: return 0x318; //fw 3.18
 				case 0xBF00: return 0x330; //fw 3.30
 			};
-			
+
 			//unknown firmware, cant continue :(
 			
 			//creates string with the size
@@ -162,14 +164,14 @@ int get_fw_version()
 			SceUID fd = _sceIoOpen(size_path, PSP_O_CREAT | PSP_O_WRONLY | PSP_O_TRUNC, 0777);
 
 			//saves string to a file in exploit_path
-			_sceIoWrite(fd, size_string, _strlen(size_string));
+			_sceIoWrite(fd, size_string, sizeof("size: 0x00000000\n"));
 			_sceIoClose(fd);
 			
 			//fills screen with blue
 			fill_screen(0x00FF0000);
 			
 			#ifdef DEBUG
-			_log("Unknown firmware, stopping\n");
+			DBG_PUTS("Unknown firmware, stopping\n");
 			#endif
 			
 			//stops the system
@@ -193,9 +195,9 @@ int load_packet_files()
 	_sprintf(packet_file, "%s/FLASH0.TN", globals.exploit_path);
 	
 	#ifdef DEBUG
-	_log("Loading packet from ");
-	_log(packet_file);
-	_log("\n");
+	DBG_PUTS("Loading packet from ");
+	DBG_PUTS(packet_file);
+	DBG_PUTS("\n");
 	#endif
 	
 	//tries to open packet
@@ -254,7 +256,7 @@ int load_packet_files()
 		#ifdef DEBUG
 		char debug_text[96];
 		_sprintf(debug_text, "%s\n\tname 0x%08X\n\tdata 0x%08X\n\tsize 0x%08X\n", new_name, new_name, new_data, entry.data_size);
-		_log(debug_text);
+		DBG_PUTS(debug_text);
 		#endif
 		
 		//update pointers
@@ -267,7 +269,7 @@ int load_packet_files()
 	_sceIoClose(fd);
 	
 	#ifdef DEBUG
-	_log("Packet loaded successfully\n");
+	DBG_PUTS("Packet loaded successfully\n");
 	#endif
 	
 	return 0;
@@ -284,7 +286,7 @@ int hook_unknown(int arg)
 	fill_screen(0x00FFFFFF);
 	
 	#ifdef DEBUG
-	_log("Calling _LoadExec000029C0()\n");
+	DBG_PUTS("Calling _LoadExec000029C0()\n");
 	#endif
 	
 	return _LoadExec000029C0(arg);
@@ -308,7 +310,7 @@ int hook_reboot(void * r_param, void * e_param, int api, int rnd)
 	memcpy((void *) 0x88FB0000, &globals, sizeof(globals));
 	
 	#ifdef DEBUG
-	_log("Calling _sceReboot()");
+	DBG_PUTS("Calling _sceReboot()");
 	#endif
 	
 	//reboot
@@ -318,7 +320,7 @@ int hook_reboot(void * r_param, void * e_param, int api, int rnd)
 void patch_loadexec(unsigned location, unsigned size)
 {
 	#ifdef DEBUG
-	_log("Patching loadexec\n");
+	DBG_PUTS("Patching loadexec\n");
 	#endif
 
 	fill_screen(0x00FFFF00); //light blue
@@ -369,12 +371,13 @@ void patch_loadexec(unsigned location, unsigned size)
 	#ifdef DEBUG
 	char debug_text[64];
 	_sprintf(debug_text, "Patches done: %d\n", patches_done);
-	_log(debug_text);
+	DBG_PUTS(debug_text);
 	#endif
 };
 
 int kfunction()
 {
+	char file[] = "ms0:/PSP/GAME/BOOT/FBOOT.PBP";
 	void (* _sceDisplaySetFrameBuf)(unsigned *, int, int, int);
 
 	exploited = 0;
@@ -408,8 +411,8 @@ int kfunction()
 	fill_screen(0x00FF0000);
 	
 	#ifdef DEBUG
-	_log_create();
-	_log("Kernel function reached\n");
+	DBG_INIT();
+	DBG_PUTS("Kernel function reached\n");
 	#endif
 
 	//gets load exec module info
@@ -427,9 +430,9 @@ int kfunction()
 	_sprintf(globals.game_id, game_info->gameId);
 	
 	#ifdef DEBUG
-	_log("Game ID: ");
-	_log(globals.game_id);
-	_log("\n");
+	DBG_PUTS("Game ID: ");
+	DBG_PUTS(globals.game_id);
+	DBG_PUTS("\n");
 	#endif
 	
 	//finds readbuffer function
@@ -453,10 +456,10 @@ int kfunction()
 		load_config(&config);
 		
 		//custom menu loading
-		if(config.load_eboot && _sceIoGetstat("ms0:/PSP/GAME/BOOT/FBOOT.PBP", &status) >= 0)
+		if(config.load_eboot && _sceIoGetstat(file, &status) >= 0)
 		{
 			#ifdef DEBUG
-			_log("Launching custom EBOOT\n");
+			DBG_PUTS("Launching custom EBOOT\n");
 			#endif
 			
 			//sets vshmain args
@@ -469,22 +472,22 @@ int kfunction()
 			struct SceKernelLoadExecVSHParam param;
 			memset(&param, 0, sizeof(param));
 			param.size = sizeof(param);
-			param.argp = "ms0:/PSP/GAME/BOOT/FBOOT.PBP"; 
-			param.args = _strlen(param.argp) + 1;
+			param.argp = file;
+			param.args = sizeof(file);
 			param.key = "game";
 			param.vshmain_args_size = sizeof(vshmain_args);
 			param.vshmain_args = vshmain_args;
 			
 			//executes menu
 			int (* _LoadExecForKernel_D940C83C)(char *, struct SceKernelLoadExecVSHParam *) = (void *)(mod->text_addr + 0x1DAC);
-			return _LoadExecForKernel_D940C83C("ms0:/PSP/GAME/BOOT/FBOOT.PBP", &param); 
+			return _LoadExecForKernel_D940C83C(file, &param);
 		};
 	};
 	
 	fill_screen(0x00000000);
 	
 	#ifdef DEBUG
-	_log("Launching VSH\n");
+	DBG_PUTS("Launching VSH\n");
 	#endif
 	
 	//proceed
@@ -577,13 +580,8 @@ static void do_exploit()
 
 void _start()
 {
-	const char path[] = "ms0:/PSP/SAVEDATA/TNV";
-	
-	//fills memory with 0's
 	memset(&globals, 0, sizeof(globals));
-	
-	//copies path
-	memcpy(globals.exploit_path, path, sizeof(path));
-	
+	memcpy(globals.exploit_path, PATH, sizeof(PATH));
+
 	do_exploit();
 }

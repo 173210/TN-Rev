@@ -22,7 +22,6 @@
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 int _strcmp(const char *s1, const char *s2);
-int _strlen(const char * str);
 char * _strchr(char * str, char c);
 int ValidUserAddress(void * addr);
 void * FindExport(const char * modulename, const char * library, u32 nid);
