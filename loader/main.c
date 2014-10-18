@@ -81,52 +81,47 @@ void error()
 	__asm("break 0x0");
 };
 
-static u32 FindTextAddrByName(const char *modulename)
+static struct SceLibraryEntryTable *kFindLib(const char *modname, const char *libname)
 {
-	u32 kaddr;
-	for (kaddr = 0x88000000; kaddr < 0x88400000; kaddr += 4) {
-		if (_strcmp((const char *)kaddr, modulename) == 0) {
-			if ((*(u32*)(kaddr + 0x64) == *(u32*)(kaddr + 0x78)) && \
-				(*(u32*)(kaddr + 0x68) == *(u32*)(kaddr + 0x88))) {
-				if (*(u32*)(kaddr + 0x64) && *(u32*)(kaddr + 0x68))
-					return *(u32*)(kaddr + 0x64);
-			}
+	struct SceLibraryEntryTable *ent;
+	struct SceLibraryEntryTable *end;
+	SceModule2 *mod;
+
+	mod = _sceKernelFindModuleByName(modname);
+	if(mod != NULL) {
+		ent = mod->ent_top;
+		end = (void *)ent + mod->ent_size * 4;
+		while((unsigned)ent < (unsigned)end) {
+			if (ent->libname == NULL) {
+				if (libname == NULL)
+					return ent;
+			} else if (!_strcmp(ent->libname, libname))
+				return ent;
+
+			ent = (void *)ent + ent->len * 4;
 		}
 	}
-	return 0;
+
+	return NULL;
 }
 
-static void *FindExport(const char *modulename, const char *library, u32 nid)
+static void *kFindFunc(const struct SceLibraryEntryTable *ent, int nid)
 {
-	u32 addr = FindTextAddrByName(modulename);
+	void *p;
+	void *end;
 
-	if (addr) {
-		for (; addr < 0x88400000; addr += 4) {
-			if (_strcmp(library, (const char *)addr) == 0) {
-				u32 libaddr = addr;
+	if (ent == NULL)
+		return NULL;
 
-				while (*(u32*)addr != libaddr)
-					addr -= 4;
-
-				u8 variables = *(u8*)(addr + 9);
-				u16 exports = (u16)(*(u16*)(addr + 10) + (u16)variables);
-				u32 jump = (u32)exports * 4;
-
-				addr = *(u32*)(addr + 12);
-
-				while (exports--) {
-					if (*(u32*)addr == nid)
-						return (void *)(*(u32*)(addr + jump));
-
-					addr += 4;
-				}
-
-				return 0;
-			}
-		}
+	p = ent->entrytable;
+	end = p + ent->stubcount * 4;
+	while (*(int *)p != nid) {
+		p += 4;
+		if ((unsigned)p >= (unsigned)end)
+			return NULL;
 	}
 
-	return 0;
+	return *((void **)p + ent->stubcount + ent->vstubcount);
 }
 
 int load_config(t_config * data)
@@ -427,6 +422,7 @@ int kfunction()
 {
 	char file[] = "ms0:/PSP/GAME/BOOT/FBOOT.PBP";
 	void (* _sceDisplaySetFrameBuf)(unsigned *, int, int, int);
+	const struct SceLibraryEntryTable *ent;
 
 	exploited = 0;
 
@@ -446,12 +442,14 @@ int kfunction()
 		};
 	};
 
-	_sceDisplaySetFrameBuf = FindExport("sceDisplay_Service", "sceDisplay", 0x289D82FE);
-	_sceIoOpen = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x109F50BC);
-	_sceIoRead = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x6A638D83);
-	_sceIoWrite = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x42EC03AC);
-	_sceIoClose = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x810C4BC3);
-	_sceIoGetstat = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0xACE946E8);
+	_sceDisplaySetFrameBuf = kFindFunc(kFindLib("sceDisplay_Service", "sceDisplay"), 0x289D82FE);
+
+	ent = kFindLib("sceIOFileManager", "IoFileMgrForKernel");
+	_sceIoOpen = kFindFunc(ent, 0x109F50BC);
+	_sceIoRead = kFindFunc(ent, 0x6A638D83);
+	_sceIoWrite = kFindFunc(ent, 0x42EC03AC);
+	_sceIoClose = kFindFunc(ent, 0x810C4BC3);
+	_sceIoGetstat = kFindFunc(ent, 0xACE946E8);
 
 	_sceDisplaySetFrameBuf((unsigned *)0x44000000, 512, 3, 1);
 
@@ -485,7 +483,7 @@ int kfunction()
 	
 	//finds readbuffer function
 	void (* _sceCtrlReadBufferPositive)(SceCtrlData *, int) = NULL;
-	_sceCtrlReadBufferPositive = FindExport("sceController_Service", "sceCtrl", 0x1F803938);
+	_sceCtrlReadBufferPositive = kFindFunc(kFindLib("sceController_Service", "sceCtrl"), 0x1F803938);
 	
 	//reads controller input
 	SceCtrlData ctrl;
