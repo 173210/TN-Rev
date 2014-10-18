@@ -572,12 +572,9 @@ static void do_exploit()
 }
 
 void _start() __attribute__((section(".text.start")));
-void _start(char * path, int unload_utilities, unsigned clean_start, unsigned clean_size)
+void _start(char * path)
 {
 	void (* _sceDisplaySetFrameBuf)(unsigned *, int, int, int) = NULL;
-	int (* _sceKernelDeleteFpl)(SceUID) = NULL;
-	int (* _sceKernelDeleteVpl)(SceUID) = NULL;
-	int (* _sceKernelFreePartitionMemory)(SceUID) = NULL;
 
 	//gets sceDisplaySetFrameBuf()
 	_sceDisplaySetFrameBuf = (void *)FindImport(p2, "sceDisplay", 0x289D82FE);
@@ -602,37 +599,7 @@ void _start(char * path, int unload_utilities, unsigned clean_start, unsigned cl
 	};
 	
 	//copies path
-	_memcpy(globals.exploit_path, path, count); 
-	
-	//finds some functions
-	_sceKernelDeleteFpl = (void *)FindImport(p2, "ThreadManForUser", 0xED1410E0);
-	_sceKernelDeleteVpl = (void *)FindImport(p2, "ThreadManForUser", 0x89B3D48C);
-	_sceKernelFreePartitionMemory = (void *)FindImport(p2, "SysMemUserForUser", 0xB6D61D02);
-
-	unsigned i;
-	for(i = clean_start; i < clean_start + clean_size; i += 4)
-	{
-		if(!_sceKernelDeleteFpl || _sceKernelDeleteFpl(*((unsigned *) i) < 0))
-		{
-			if(!_sceKernelDeleteVpl || _sceKernelDeleteVpl(*((unsigned *) i)) < 0)
-			{
-				if(_sceKernelFreePartitionMemory)
-					_sceKernelFreePartitionMemory(*((unsigned *) i));
-			};
-		};
-	};
-	
-	if(unload_utilities) //must unload utilities
-	{
-		void (* _sceUtilityUnloadModule)(int) = NULL;
-		_sceUtilityUnloadModule = (void *)FindImport(p2, "sceUtility", 0xE49BFE92);
-		if(_sceUtilityUnloadModule)
-		{
-			for(i = 0x100; i < 0x402; i++) //does it the other way
-				_sceUtilityUnloadModule(i);
-		};
-	};
+	_memcpy(globals.exploit_path, path, count);
 	
 	do_exploit();
-	while(1){}; //infinite loop
-};
+}
