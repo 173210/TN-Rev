@@ -375,15 +375,14 @@ void patch_loadexec(unsigned location, unsigned size)
 
 int kfunction()
 {
-	//set k1 to 0
+	void (* _sceDisplaySetFrameBuf)(unsigned *, int, int, int);
+
+	exploited = 0;
+
 	__asm("move $k1, $0;");
-	
-	//fills screen with blue
-	fill_screen(0x00FF0000);
-	
-	//fixes kernel
+
 	*exploitPointer = 0;
-	
+
 	//searchs for sceKernelFindModuleByName in kram
 	_sceKernelFindModuleByName = NULL;
 	unsigned * kp;
@@ -395,13 +394,18 @@ int kfunction()
 			break;
 		};
 	};
-	
-	//searches IO file functions
+
+	_sceDisplaySetFrameBuf = FindExport("sceDisplay_Service", "sceDisplay", 0x289D82FE);
 	_sceIoOpen = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x109F50BC);
 	_sceIoRead = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x6A638D83);
 	_sceIoWrite = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x42EC03AC);
 	_sceIoClose = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0x810C4BC3);
 	_sceIoGetstat = FindExport("sceIOFileManager", "IoFileMgrForKernel", 0xACE946E8);
+
+	_sceDisplaySetFrameBuf((unsigned *)0x44000000, 512, 3, 1);
+
+	//fills screen with blue
+	fill_screen(0x00FF0000);
 	
 	#ifdef DEBUG
 	_log_create();
@@ -574,18 +578,6 @@ static void do_exploit()
 void _start()
 {
 	const char path[] = "ms0:/PSP/SAVEDATA/TNV";
-
-	void (* _sceDisplaySetFrameBuf)(unsigned *, int, int, int) = NULL;
-
-	//gets sceDisplaySetFrameBuf()
-	_sceDisplaySetFrameBuf = (void *)FindImport(p2, "sceDisplay", 0x289D82FE);
-	
-	//sets display buffer
-	if(_sceDisplaySetFrameBuf)
-		_sceDisplaySetFrameBuf((unsigned *) 0x44000000, 512, 3, 1);
-		
-	//fills screen with white
-	fill_screen(0x00FFFFFF); 
 	
 	//fills memory with 0's
 	memset(&globals, 0, sizeof(globals));
