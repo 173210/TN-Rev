@@ -3,7 +3,7 @@ PSPDEV=$(shell psp-config --pspdev-path)
 INCLUDE=$(PSPSDK)/include
 
 CC = psp-gcc
-CFLAGS := -D PSP -I $(INCLUDE) -W -Wall -O2 -G0 -fno-pic -mno-abicalls -w -fomit-frame-pointer
+CFLAGS := -D PSP -I $(INCLUDE) -W -Wall -O2 -G0 -fno-builtin -fno-pic -mno-abicalls -fomit-frame-pointer
 ASM = psp-as
 
 all: main.o lib.o linker.x
